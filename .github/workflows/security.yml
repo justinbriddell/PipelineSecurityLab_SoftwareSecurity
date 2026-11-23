@@ -1,0 +1,36 @@
+# Part 1 version: save as .github/workflows/security.yml
+# Three SEPARATE jobs, so a failing gate doesn't stop the other scans from running.
+name: security
+on: [push, pull_request]
+
+jobs:
+  secrets:
+    name: secrets (gate)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }   # gitleaks scans full history
+      - name: Secret scan (Gitleaks) - GATE
+        run: |
+          docker run --rm -v "${{ github.workspace }}:/repo" zricethezav/gitleaks:latest \
+            detect --source /repo --redact --verbose --exit-code 1
+
+  sast:
+    name: sast (gate)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: SAST (Semgrep) - GATE
+        run: |
+          docker run --rm -v "${{ github.workspace }}:/src" -w /src semgrep/semgrep:latest \
+            semgrep scan --config auto --error
+
+  dependencies:
+    name: dependencies (report)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dependency scan (Trivy) - REPORT
+        run: |
+          docker run --rm -v "${{ github.workspace }}:/repo" aquasec/trivy:latest \
+            fs --scanners vuln --exit-code 0 /repo
